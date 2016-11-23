@@ -14,6 +14,30 @@ GROUP_ROOT_URL = 'http://lyric.musichk.org/group.htm'
 ROOT_URLS = [MALE_ROOT_URL, FEMALE_ROOT_URL, GROUP_ROOT_URL]
 
 
+def scrap_song(song_url):
+    print 'Scraping song...'
+
+
+def scrap_album(album_url):
+    print 'Scraping album...'
+
+
+def scrap_singer(singer_url):
+    print 'Scraping singer {}'.format(singer_url)
+    page = urllib2.urlopen(url)
+    soup = BeautifulSoup(page.read())
+
+    albums = {}
+    links = soup.find_all('a')
+    for link in links:
+        album_name = link.getText()
+        album_hyperlink = link.get('href')
+        if album_name and 'main1' in album_hyperlink:
+            albums[album_name] = scrap_album(BASE_URL + album_hyperlink)
+
+    return albums
+
+
 def scrap_url(url):
     page = urllib2.urlopen(url)
     soup = BeautifulSoup(page.read())
@@ -21,10 +45,12 @@ def scrap_url(url):
     singers = {}
     links = soup.find_all('a')
     for link in links:
-        singer_hyperlink = link.get('href')
         singer_name = link.getText()
-        if 'main1' in singer_hyperlink and singer_name:
-            singers = {singer_name : BASE_URL + singer_hyperlink}
+        singer_hyperlink = link.get('href')
+        if singer_name and 'main1' in singer_hyperlink:
+            singers[singer_name] = scrap_singer(BASE_URL + singer_hyperlink)
+
+    return singers
 
 
 def run_scraper():
