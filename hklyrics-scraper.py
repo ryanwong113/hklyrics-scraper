@@ -1,60 +1,88 @@
 from bs4 import BeautifulSoup
 
+import codecs
 import io
+import json
 import urllib2
 import StringIO
 import sys
 
-BASE_URL = 'http://lyric.musichk.org/'
+BASE_URL = 'https://mojim.com'
 
-MALE_ROOT_URL = 'http://lyric.musichk.org/male.htm'
-FEMALE_ROOT_URL = 'http://lyric.musichk.org/female.htm'
-GROUP_ROOT_URL = 'http://lyric.musichk.org/group.htm'
+MALE_ROOT_URL = 'https://mojim.com/twza1.htm'
+FEMALE_ROOT_URL = 'https://mojim.com/twzb1.htm'
+GROUP_ROOT_URL = 'https://mojim.com/twzc1.htm'
 
 ROOT_URLS = [MALE_ROOT_URL, FEMALE_ROOT_URL, GROUP_ROOT_URL]
 
 
 def scrap_song(song_url):
-    print 'Scraping song...'
-
-
-def scrap_album(album_url):
-    print 'Scraping album...'
+    print 'Scraping song from {}'.format(song_url)
 
 
 def scrap_singer(singer_url):
-    print 'Scraping singer {}'.format(singer_url)
-    page = urllib2.urlopen(url)
-    soup = BeautifulSoup(page.read())
+    print 'Scraping singer from {}'.format(singer_url)
+    page = urllib2.urlopen(singer_url, timeout=5)
+    soup = BeautifulSoup(page.read(), 'lxml')
 
     albums = {}
-    links = soup.find_all('a')
-    for link in links:
-        album_name = link.getText()
-        album_hyperlink = link.get('href')
-        if album_name and 'main1' in album_hyperlink:
-            albums[album_name] = scrap_album(BASE_URL + album_hyperlink)
+
+    div_section = soup.find('div', {'id' : 'inS'})
+    
+    dd_sections = div_section.find_all('dd', {'class' : ['hb2', 'hb3']})
+    
+    for dd_section in dd_sections:
+
+        album_span = dd_section.find('span', {'class' : 'hc1'})
+        album_name = album_span.getText()
+        album_hyperlink = album_span.get('href')
+       
+        song_span = dd_section.find('span', {'class' : ['hc3', 'hc4']})
+        song_links = song_span.find_all('a')
+        
+        songs = {}
+
+        for song_link in song_links:
+            song_name = song_link.getText()
+            song_hyperlink = song_link.get('href')
+            
+            songs[song_name] = BASE_URL + song_hyperlink
+            
+        albums[album_name] = songs
 
     return albums
 
 
 def scrap_url(url):
-    page = urllib2.urlopen(url)
-    soup = BeautifulSoup(page.read())
+    print 'Scraping from {}...'.format(url)
+    page = urllib2.urlopen(url, timeout=5)
+    soup = BeautifulSoup(page.read(), 'lxml')
 
     singers = {}
-    links = soup.find_all('a')
+
+    ul_section = soup.find('ul', {'class' : 's_listA'})
+    links = ul_section.find_all('a')
     for link in links:
         singer_name = link.getText()
         singer_hyperlink = link.get('href')
-        if singer_name and 'main1' in singer_hyperlink:
-            singers[singer_name] = scrap_singer(BASE_URL + singer_hyperlink)
+        
+        write_data_to_file(singer_name)
 
+        singers[singer_name] = scrap_singer(BASE_URL + singer_hyperlink)
+        break
+    
     return singers
+
+    
+def write_data_to_file(data):
+    print repr(data).decode('unicode-escape')
+    with codecs.open('data.json', 'w', 'utf-8-sig') as json_file:
+        json.dump(data, json_file)
 
 
 def run_scraper():
-    scrap_url(MALE_ROOT_URL)
+    data = scrap_url(MALE_ROOT_URL)
+    #write_data_to_file(data)
     # for root_url in ROOT_URLS:
     # 	scrap_url(root_url)
 	
