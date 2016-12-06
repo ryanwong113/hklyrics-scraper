@@ -18,6 +18,26 @@ ROOT_URLS = [MALE_ROOT_URL, FEMALE_ROOT_URL, GROUP_ROOT_URL]
 
 def scrap_song(song_url):
     print 'Scraping song from {}'.format(song_url)
+    page = urllib2.urlopen(song_url, timeout=5)
+    soup = BeautifulSoup(page.read(), 'lxml')
+
+    lyrics_section = soup.find('dd', {'id' : 'fsZx3'})
+
+    print lyrics_section
+    
+    print lyrics_section.string
+
+    lyrics_section.string.replace('<br>', '\n')
+
+    #print lyrics_section
+
+    lyrics = ''
+    for lyrics_line in lyrics_lines:
+        lyrics += lyrics_line.getText() + '\n'
+
+    return lyrics_lines
+
+
 
 
 def scrap_singer(singer_url):
@@ -46,7 +66,7 @@ def scrap_singer(singer_url):
             song_name = song_link.getText()
             song_hyperlink = song_link.get('href')
             
-            songs[song_name] = BASE_URL + song_hyperlink
+            songs[song_name] = scrap_song(BASE_URL + song_hyperlink)
             
         albums[album_name] = songs
 
@@ -69,13 +89,16 @@ def scrap_url(url):
         write_data_to_file(singer_name)
 
         singers[singer_name] = scrap_singer(BASE_URL + singer_hyperlink)
+
         break
-    
+
     return singers
 
     
 def write_data_to_file(data):
-    print repr(data).decode('unicode-escape')
+    # print repr(data).decode('unicode-escape')
+    # data.encode('utf-8')
+    print data
     with codecs.open('data.json', 'w', 'utf-8-sig') as json_file:
         json.dump(data, json_file)
 
