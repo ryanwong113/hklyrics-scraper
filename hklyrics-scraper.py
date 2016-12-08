@@ -22,14 +22,11 @@ def scrap_song(song_url):
     soup = BeautifulSoup(page.read(), 'lxml')
 
     lyrics_section = soup.find('dd', {'id' : 'fsZx3'})
+
+    print lyrics_section.contents
+
     lyrics_section_string = str(lyrics_section).decode('utf-8')
     lyrics_section_string.replace('<br/>', '\n')
-
-    print lyrics_section_string
-
-    write_data_to_file(lyrics_section_string)
-
-    #print lyrics_section
 
     lyrics = ''
     for lyrics_line in lyrics_lines:
@@ -96,8 +93,9 @@ def scrap_url(url):
 
     
 def write_data_to_file(data):
-    with codecs.open('data.json', 'w', encoding='utf8') as json_file:
-        json.dump(data, json_file)
+    with io.open('data.json', 'w', encoding='utf-8') as json_file:
+        json_data = json.dumps(data, ensure_ascii=False)
+        json_file.write(unicode(json_data))
 
 
 def run_scraper():
