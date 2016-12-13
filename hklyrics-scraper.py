@@ -20,8 +20,6 @@ REMOVE_LYRICS_LINE = '更多更詳盡歌詞 在'.decode('utf-8')
 
 
 def write_data_to_file(data):
-    print data
-
     with io.open('data.json', 'w', encoding='utf-8') as data_json_file:
         json_data = json.dumps(data, ensure_ascii=False)
         data_json_file.write(unicode(json_data))
@@ -97,16 +95,19 @@ def scrap_singer(singer_name, singer_url):
     for dd_section in dd_sections:
 
         album_span = dd_section.find('span', {'class' : 'hc1'})
-        album_name = album_span.getText().encode('utf-8')
+        album_name = album_span.getText()
         album_hyperlink = album_span.get('href')
        
-        song_span = dd_section.find('span', {'class' : ['hc3', 'hc4']})
-        song_links = song_span.find_all('a')
-        
+        song_spans = dd_section.find_all('span', {'class' : ['hc3', 'hc4']})
+
+        song_links = []
+        for song_span in song_spans:
+            song_links += song_span.find_all('a')
+
         songs = {}
 
         for song_link in song_links:
-            song_name = song_link.getText().encode('utf-8')
+            song_name = song_link.getText()
             song_hyperlink = song_link.get('href')
             
             songs[song_name] = scrap_song(song_name, BASE_URL + song_hyperlink)
@@ -132,7 +133,7 @@ def scrap_url(url):
     ul_section = soup.find('ul', {'class' : 's_listA'})
     links = ul_section.find_all('a')
     for link in links:
-        singer_name = link.getText().encode('utf-8')
+        singer_name = link.getText()
         singer_hyperlink = link.get('href')
         
         singers[singer_name] = scrap_singer(singer_name, BASE_URL + singer_hyperlink)
