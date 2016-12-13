@@ -1,10 +1,11 @@
+# -*- coding: utf-8 -*-
+
 from bs4 import BeautifulSoup
 
-import codecs
 import io
 import json
+import os
 import urllib2
-import StringIO
 import sys
 
 BASE_URL = 'https://mojim.com'
@@ -15,30 +16,75 @@ GROUP_ROOT_URL = 'https://mojim.com/twzc1.htm'
 
 ROOT_URLS = [MALE_ROOT_URL, FEMALE_ROOT_URL, GROUP_ROOT_URL]
 
+REMOVE_LYRICS_LINE = '更多更詳盡歌詞 在'.decode('utf-8')
 
-def scrap_song(song_url):
-    print 'Scraping song from {}'.format(song_url)
+
+def write_data_to_file(data):
+    print data
+
+    with io.open('data.json', 'w', encoding='utf-8') as data_json_file:
+        json_data = json.dumps(data, ensure_ascii=False)
+        data_json_file.write(unicode(json_data))
+
+
+def add_checkpoint(checkpoint_type, checkpoint_content):
+    print checkpoint_type
+    print checkpoint_content
+
+    checkpoint_json_filename = 'checkpoint.json'
+
+    if os.path.isfile(checkpoint_json_filename):
+        with io.open(checkpoint_json_filename, 'r', encoding='utf-8') as checkpoint_json_file:
+            checkpoint_data = json.load(checkpoint_json_file)
+            checkpoint_data[checkpoint_type] = checkpoint_content
+
+        os.remove(checkpoint_json_filename)
+    else:
+        checkpoint_data = {}
+        checkpoint_data[checkpoint_type] = checkpoint_content.decode('utf-8')
+
+    print checkpoint_data
+
+    with io.open(checkpoint_json_filename, 'w', encoding='utf-8') as checkpoint_json_file:
+        json_checkpoint_data = json.dumps(checkpoint_data, ensure_ascii=False)
+        checkpoint_json_file.write(unicode(json_checkpoint_data))
+
+def add_song_checkpoint(song_name):
+    add_checkpoint('song', song_name)
+
+def add_album_checkpoint(album_name):
+    add_checkpoint('album', album_name)
+
+def add_singer_checkpoint(singer_name):
+    add_checkpoint('singer', singer_name)
+
+
+def scrap_song(song_name, song_url):
+    print 'Scraping song %s from %s' % (song_name, song_url)
     page = urllib2.urlopen(song_url, timeout=5)
     soup = BeautifulSoup(page.read(), 'lxml')
 
     lyrics_section = soup.find('dd', {'id' : 'fsZx3'})
 
-    print lyrics_section.contents
-
-    lyrics_section_string = str(lyrics_section).decode('utf-8')
-    lyrics_section_string.replace('<br/>', '\n')
-
     lyrics = ''
-    for lyrics_line in lyrics_lines:
-        lyrics += lyrics_line.getText() + '\n'
+    for lyrics_section_element in lyrics_section.contents:
+        if '[' in lyrics_section_element:
+            break
+        else:
+            if isinstance(lyrics_section_element, basestring) and not REMOVE_LYRICS_LINE in lyrics_section_element:
+                lyrics += lyrics_section_element
+            else:
+                lyrics += '\n'
 
-    return lyrics_lines
+    # add_song_checkpoint(song_name)
+
+    # lyrics_section_string = str(lyrics_section).decode('utf-8')
+
+    return lyrics
 
 
-
-
-def scrap_singer(singer_url):
-    print 'Scraping singer from {}'.format(singer_url)
+def scrap_singer(singer_name, singer_url):
+    print 'Scraping singer %s from %s' % (singer_name, singer_url)
     page = urllib2.urlopen(singer_url, timeout=5)
     soup = BeautifulSoup(page.read(), 'lxml')
 
@@ -51,7 +97,7 @@ def scrap_singer(singer_url):
     for dd_section in dd_sections:
 
         album_span = dd_section.find('span', {'class' : 'hc1'})
-        album_name = album_span.getText()
+        album_name = album_span.getText().encode('utf-8')
         album_hyperlink = album_span.get('href')
        
         song_span = dd_section.find('span', {'class' : ['hc3', 'hc4']})
@@ -60,12 +106,18 @@ def scrap_singer(singer_url):
         songs = {}
 
         for song_link in song_links:
-            song_name = song_link.getText()
+            song_name = song_link.getText().encode('utf-8')
             song_hyperlink = song_link.get('href')
             
-            songs[song_name] = scrap_song(BASE_URL + song_hyperlink)
+            songs[song_name] = scrap_song(song_name, BASE_URL + song_hyperlink)
             
         albums[album_name] = songs
+
+        # add_album_checkpoint(album_name)
+
+        return albums
+
+    # add_singer_checkpoint(singer_name)
 
     return albums
 
@@ -80,27 +132,18 @@ def scrap_url(url):
     ul_section = soup.find('ul', {'class' : 's_listA'})
     links = ul_section.find_all('a')
     for link in links:
-        singer_name = link.getText()
+        singer_name = link.getText().encode('utf-8')
         singer_hyperlink = link.get('href')
         
-        write_data_to_file(singer_name)
-
-        singers[singer_name] = scrap_singer(BASE_URL + singer_hyperlink)
-
+        singers[singer_name] = scrap_singer(singer_name, BASE_URL + singer_hyperlink)
         break
 
     return singers
 
-    
-def write_data_to_file(data):
-    with io.open('data.json', 'w', encoding='utf-8') as json_file:
-        json_data = json.dumps(data, ensure_ascii=False)
-        json_file.write(unicode(json_data))
-
 
 def run_scraper():
     data = scrap_url(MALE_ROOT_URL)
-    #write_data_to_file(data)
+    write_data_to_file(data)
     # for root_url in ROOT_URLS:
     # 	scrap_url(root_url)
 	
