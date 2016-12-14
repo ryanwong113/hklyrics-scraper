@@ -21,14 +21,11 @@ REMOVE_LYRICS_LINE = '更多更詳盡歌詞 在'.decode('utf-8')
 
 def write_data_to_file(data):
     with io.open('data.json', 'w', encoding='utf-8') as data_json_file:
-        json_data = json.dumps(data, ensure_ascii=False)
+        json_data = json.dumps(data, ensure_ascii=False, indent=4, separators=(',', ': '))
         data_json_file.write(unicode(json_data))
 
 
 def add_checkpoint(checkpoint_type, checkpoint_content):
-    print checkpoint_type
-    print checkpoint_content
-
     checkpoint_json_filename = 'checkpoint.json'
 
     if os.path.isfile(checkpoint_json_filename):
@@ -39,12 +36,13 @@ def add_checkpoint(checkpoint_type, checkpoint_content):
         os.remove(checkpoint_json_filename)
     else:
         checkpoint_data = {}
-        checkpoint_data[checkpoint_type] = checkpoint_content.decode('utf-8')
-
-    print checkpoint_data
+        checkpoint_data['singer'] = ''
+        checkpoint_data['album'] = ''
+        checkpoint_data['song'] = ''
+        checkpoint_data[checkpoint_type] = checkpoint_content
 
     with io.open(checkpoint_json_filename, 'w', encoding='utf-8') as checkpoint_json_file:
-        json_checkpoint_data = json.dumps(checkpoint_data, ensure_ascii=False)
+        json_checkpoint_data = json.dumps(checkpoint_data, ensure_ascii=False, indent=4, separators=(',', ': '))
         checkpoint_json_file.write(unicode(json_checkpoint_data))
 
 def add_song_checkpoint(song_name):
@@ -74,9 +72,7 @@ def scrap_song(song_name, song_url):
             else:
                 lyrics += '\n'
 
-    # add_song_checkpoint(song_name)
-
-    # lyrics_section_string = str(lyrics_section).decode('utf-8')
+    add_song_checkpoint(song_name)
 
     return lyrics
 
@@ -114,11 +110,11 @@ def scrap_singer(singer_name, singer_url):
             
         albums[album_name] = songs
 
-        # add_album_checkpoint(album_name)
+        add_album_checkpoint(album_name)
 
         return albums
 
-    # add_singer_checkpoint(singer_name)
+    add_singer_checkpoint(singer_name)
 
     return albums
 
