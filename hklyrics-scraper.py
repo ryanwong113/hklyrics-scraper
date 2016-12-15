@@ -19,19 +19,24 @@ ROOT_URLS = [MALE_ROOT_URL, FEMALE_ROOT_URL, GROUP_ROOT_URL]
 REMOVE_LYRICS_LINE = '更多更詳盡歌詞 在'.decode('utf-8')
 
 
-def write_data_to_file(data):
-    with io.open('data.json', 'w', encoding='utf-8') as data_json_file:
+def write_data_to_file(filename, data):
+    with io.open(filename, 'w', encoding='utf-8') as json_file:
         json_data = json.dumps(data, ensure_ascii=False, indent=4, separators=(',', ': '))
-        data_json_file.write(unicode(json_data))
+        json_file.write(unicode(json_data))
+
+
+def read_data_from_file(filename):
+    with io.open(filename, 'r', encoding='utf-8') as json_file:
+        data = json.load(json_file)
+        return data
 
 
 def add_checkpoint(checkpoint_type, checkpoint_content):
     checkpoint_json_filename = 'checkpoint.json'
 
     if os.path.isfile(checkpoint_json_filename):
-        with io.open(checkpoint_json_filename, 'r', encoding='utf-8') as checkpoint_json_file:
-            checkpoint_data = json.load(checkpoint_json_file)
-            checkpoint_data[checkpoint_type] = checkpoint_content
+        checkpoint_data = read_data_from_file(checkpoint_json_filename)
+        checkpoint_data[checkpoint_type] = checkpoint_content
 
         os.remove(checkpoint_json_filename)
     else:
@@ -41,9 +46,7 @@ def add_checkpoint(checkpoint_type, checkpoint_content):
         checkpoint_data['song'] = ''
         checkpoint_data[checkpoint_type] = checkpoint_content
 
-    with io.open(checkpoint_json_filename, 'w', encoding='utf-8') as checkpoint_json_file:
-        json_checkpoint_data = json.dumps(checkpoint_data, ensure_ascii=False, indent=4, separators=(',', ': '))
-        checkpoint_json_file.write(unicode(json_checkpoint_data))
+    write_data_to_file(checkpoint_json_filename, checkpoint_data)
 
 def add_song_checkpoint(song_name):
     add_checkpoint('song', song_name)
@@ -100,19 +103,20 @@ def scrap_singer(singer_name, singer_url):
         for song_span in song_spans:
             song_links += song_span.find_all('a')
 
-        songs = {}
+        songs = []
 
         for song_link in song_links:
             song_name = song_link.getText()
             song_hyperlink = song_link.get('href')
             
-            songs[song_name] = scrap_song(song_name, BASE_URL + song_hyperlink)
+            songs.append({song_name : scrap_song(song_name, BASE_URL + song_hyperlink)})
             
         albums[album_name] = songs
 
         add_album_checkpoint(album_name)
 
-        return albums
+        # TODO: Remove the break
+        # break
 
     add_singer_checkpoint(singer_name)
 
@@ -133,17 +137,21 @@ def scrap_url(url):
         singer_hyperlink = link.get('href')
         
         singers[singer_name] = scrap_singer(singer_name, BASE_URL + singer_hyperlink)
+
+        # TODO: Remove the break
         break
 
     return singers
 
 
 def run_scraper():
-    data = scrap_url(MALE_ROOT_URL)
-    write_data_to_file(data)
-    # for root_url in ROOT_URLS:
-    # 	scrap_url(root_url)
-	
+    for root_url in ROOT_URLS:
+        data = scrap_url(root_url)
+        write_data_to_file('data.json', data)
+
+        # TODO: Remove the break
+        break
+    
 
 if __name__ == "__main__":
     run_scraper()
