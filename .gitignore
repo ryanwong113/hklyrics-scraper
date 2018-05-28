@@ -1,5 +1,8 @@
 .DS_Store
 
+*.db
 *.pyc
 *.json
 *.swp
+
+data/

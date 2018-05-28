@@ -1,7 +1,10 @@
 # -*- coding: utf-8 -*-
 
 from bs4 import BeautifulSoup
+from sets import Set
 
+import argparse
+import codecs
 import io
 import json
 import os
@@ -9,189 +12,131 @@ import urllib2
 import sys
 
 BASE_URL = 'https://mojim.com'
-
-MALE_ROOT_URL = 'https://mojim.com/twza1.htm'
-FEMALE_ROOT_URL = 'https://mojim.com/twzb1.htm'
-GROUP_ROOT_URL = 'https://mojim.com/twzc1.htm'
-
-ROOT_URLS = [MALE_ROOT_URL, FEMALE_ROOT_URL, GROUP_ROOT_URL]
-
 REMOVE_LYRICS_LINE = '更多更詳盡歌詞 在'.decode('utf-8')
+PROVIDE_CONSTANT = '提供'.decode('utf-8')
+LYRICIST_CONSTANT = '作詞'.decode('utf-8')
+COMPOSER_CONSTANT = '作曲'.decode('utf-8')
+ARRANGER_CONSTANT = '編曲'.decode('utf-8')
+PRODUCER_CONSTANT = '監製'.decode('utf-8')
+COLON_CONSTANT = '：'.decode('utf-8')
+
+def read_data_from_file(filepath):
+    with codecs.open(filepath, 'r', 'utf-8') as json_file:
+        data = json.load(json_file, 'utf-8')
+        return data
 
 
-def write_data_to_file(filename, data):
-    with io.open(filename, 'w', encoding='utf-8') as json_file:
+def write_data_to_file(filepath, data):
+    with codecs.open(filepath, 'w', 'utf-8') as json_file:
         json_data = json.dumps(data, ensure_ascii=False, indent=4, separators=(',', ': '))
         json_file.write(unicode(json_data))
 
 
-def read_data_from_file(filename):
-    with io.open(filename, 'r', encoding='utf-8') as json_file:
-        data = json.load(json_file)
-        return data
-
-
-def append_data_to_file(filename, data):
-    if os.path.isfile(filename):
-        json_data_from_file = read_data_from_file(filename)
-
-        os.remove(filename)
+def write_song_data_to_file(singer_name, song_name, song_data):
+    filepath = 'data/%s.json' % singer_name
+    if os.path.isfile(filepath):
+        data = read_data_from_file(filepath)
+        data[song_name] = song_data
+        write_data_to_file(filepath, data)
     else:
-        json_data_from_file = {}
+        write_data_to_file(filepath, {song_name: song_data})
 
-    for singer_name, albums_and_songs in data.iteritems():
-        json_data_from_file[singer_name] = albums_and_songs
+def get_singer_url(singer_name):
+    source_files = ['data/singers_male.json', 'data/singers_female.json', 'data/singers_group.json']
+    for source_file in source_files:
+        singers_data = read_data_from_file(source_file)
+        if singer_name in singers_data:
+            return singers_data[singer_name]
 
-    write_data_to_file(filename, json_data_from_file)
-
-
-def add_checkpoint(filename, checkpoint_type, checkpoint_content):
-    checkpoint_json_filename = filename
-
-    if os.path.isfile(checkpoint_json_filename):
-        checkpoint_data = read_data_from_file(checkpoint_json_filename)
-        checkpoint_data[checkpoint_type].append(checkpoint_content)
-
-        os.remove(checkpoint_json_filename)
-    else:
-        checkpoint_data = {}
-        checkpoint_data[checkpoint_type] = [checkpoint_content]
-
-    write_data_to_file(checkpoint_json_filename, checkpoint_data)
+    raise Exception('Singer %s does not exist' % singer_name)
 
 
-def add_singer_checkpoint(singer_name):
-    add_checkpoint('checkpoint.json', 'singer', singer_name)
+def load_scraped_songs_for_singer(singer_name):
+    filepath = 'data/%s.json' % singer_name
+    if os.path.isfile(filepath):
+        return Set(read_data_from_file(filepath).keys())
+    return Set()
 
 
-def add_failed_song(song_name):
-    add_checkpoint('failures.json', 'song', song_name)
+def scrape_singer(singer_name):
+    scraped_songs = load_scraped_songs_for_singer(singer_name)
 
+    singer_url = get_singer_url(singer_name)
+    singer_url = BASE_URL + singer_url[:len(singer_url)-4] + '-A1' + singer_url[len(singer_url)-4:]
 
-def add_hyperlinks(hyperlinks):
-    append_data_to_file('hyperlinks.json', hyperlinks)
+    singer_page = urllib2.urlopen(singer_url, timeout=5)
+    singer_soup = BeautifulSoup(singer_page.read(), 'lxml')
 
+    div_section = singer_soup.find('div', {'id' : 'inS'})
+    song_sections = div_section.find_all('dd', {'class' : ['hb2', 'hb3']})
 
-def get_lyrics(song_name, url):
-    try:
-        page = urllib2.urlopen(url, timeout=5)
-        soup = BeautifulSoup(page.read(), 'lxml')
+    songs = {}
+    for song_section in song_sections:
+        song_span = song_section.find('span', {'class' : 'hc1'})
 
-        lyrics_section = soup.find('dd', {'id' : 'fsZx3'})
+        song_name = song_span.getText().upper()
 
-        lyrics = ''
-        for lyrics_section_element in lyrics_section.contents:
-            if '[' in lyrics_section_element:
-                break
-            else:
-                if isinstance(lyrics_section_element, basestring) and not REMOVE_LYRICS_LINE in lyrics_section_element:
-                    lyrics += lyrics_section_element
-                else:
-                    lyrics += '\n'
+        if PROVIDE_CONSTANT in song_name or 'MEDLEY' in song_name:
+            print 'Not scraping %s' % song_name
+            continue
 
-        return lyrics
+        if song_name in scraped_songs:
+            print 'Already scraped %s' % song_name
+            continue
 
-    except Exception as ex:
-        print 'Exception when scraping song %s' % ex
-        add_failed_song(song_name)
+        print 'Scraping %s' % song_name
 
+        song_hyperlink = song_span.find('a')['href']
 
-def get_albums_and_songs(url):
-    try:
-        page = urllib2.urlopen(url, timeout=5)
-        soup = BeautifulSoup(page.read(), 'lxml')
+        song_url = BASE_URL + song_hyperlink
+        song_page = urllib2.urlopen(song_url, timeout=5)
+        song_soup = BeautifulSoup(song_page.read(), 'lxml')
 
-        albums = {}
+        try:
+            lyrics_section = song_soup.find('dd', {'id' : 'fsZx3'})
 
-        div_section = soup.find('div', {'id' : 'inS'})
-        
-        dd_sections = div_section.find_all('dd', {'class' : ['hb2', 'hb3']})
-        
-        for dd_section in dd_sections:
-
-            album_span = dd_section.find('span', {'class' : 'hc1'})
-            album_name = album_span.getText()
-            album_hyperlink = album_span.get('href')
-           
-            song_spans = dd_section.find_all('span', {'class' : ['hc3', 'hc4']})
-
-            song_links = []
-            for song_span in song_spans:
-                song_links += song_span.find_all('a')
-
-            songs = []
-
-            for song_link in song_links:
-                song_name = song_link.getText()
-                song_hyperlink = song_link.get('href')
-                
-                songs.append({song_name : song_hyperlink})
-                
-            albums[album_name] = songs
-
-        return albums
-
-    except Exception as ex:
-        print 'Exception when scraping singer: %s' % ex
-
-
-def get_singers(url):
-    try:
-        page = urllib2.urlopen(url, timeout=5)
-        soup = BeautifulSoup(page.read(), 'lxml')
-
-        singers = {}
-
-        ul_section = soup.find('ul', {'class' : 's_listA'})
-        links = ul_section.find_all('a')
-        for link in links:
-            singer_name = link.getText()
-            singer_hyperlink = link.get('href')
+            lyricist = ''
+            composer = ''
+            arranger = ''
+            producer = ''
+            lyrics = ''
+            for lyrics_section_element in lyrics_section.contents:
+                if '<' not in lyrics_section_element and '[' not in lyrics_section_element:
+                    if (isinstance(lyrics_section_element, basestring)) and (not REMOVE_LYRICS_LINE in lyrics_section_element):
+                        if (LYRICIST_CONSTANT in lyrics_section_element):
+                            lyricist = lyrics_section_element.split(COLON_CONSTANT)[1].strip()
+                        elif (COMPOSER_CONSTANT in lyrics_section_element):
+                            composer = lyrics_section_element.split(COLON_CONSTANT)[1].strip()
+                        elif (ARRANGER_CONSTANT in lyrics_section_element):
+                            arranger = lyrics_section_element.split(COLON_CONSTANT)[1].strip()
+                        elif (PRODUCER_CONSTANT in lyrics_section_element):
+                            producer = lyrics_section_element.split(COLON_CONSTANT)[1].strip()
+                        else:
+                            lyrics += lyrics_section_element
+                    else:
+                        lyrics += '\n'
             
-            singers[singer_name] = singer_hyperlink
+            song = {
+                'lyricist': lyricist,
+                'composer': composer,
+                'arranger': arranger,
+                'producer': producer,
+                'lyrics': lyrics
+            }
+            scraped_songs.add(song_name)
+            write_song_data_to_file(singer_name, song_name, song)
+        except Exception as e:
+            print 'Exception when scraping %s, skipping: %s' % song_name, e
 
-        return singers
-    except Exception as ex:
-        print 'Exception when scraping singer: %s' % ex
-
-
-def run_scraper():
-    checkpoint_data = read_data_from_file('checkpoint.json')
-    singers_checkpoint = checkpoint_data['singer']
-
-    for root_url in ROOT_URLS:
-        singers = get_singers(root_url)
-
-        for singer_name, singer_hyperlink in singers.iteritems():
-            if singer_name in singers_checkpoint:
-                print 'Singer %s has already been scraped, skipping...' % singer_name
-            else:
-                print 'Scraping singer %s...' % singer_name
-                albums_and_songs = get_albums_and_songs(BASE_URL + singer_hyperlink)
-
-                print 'Retrived %d albums.' % len(albums_and_songs)
-
-                albums_and_songs_with_lyrics = {}
-                for index, (album_name, songs) in enumerate(albums_and_songs.iteritems(), 1):
-                    print '%d: Album %s has %d songs' % (index, album_name, len(songs))
-
-                    songs_with_lyrics = []
-                    for song in songs:
-                        for song_name, song_hyperlink in song.iteritems():
-                            print 'Getting lyrics for song %s' % song_name
-                            lyrics = get_lyrics(song_name, BASE_URL + song_hyperlink)
-                            songs_with_lyrics.append({song_name : lyrics})
-
-                    albums_and_songs_with_lyrics[album_name] = songs_with_lyrics
-
-                print 'Finished scraping for %s. Appending data to file...' % singer_name
-                append_data_to_file('data.json', {singer_name: albums_and_songs_with_lyrics})
-
-                print 'Adding %s to checkpoint...' % singer_name
-                add_singer_checkpoint(singer_name)
-
-                exit(0)
-    
 
 if __name__ == "__main__":
-    run_scraper()
+    parser = argparse.ArgumentParser(description='To scrape Hong Kong lyrics.')
+    parser.add_argument('--singer', nargs='?', help='singer name')
+    
+    args = parser.parse_args()
+    if args.singer is not None:
+        singer_name = unicode(args.singer, 'utf-8')
+        print 'Scraping singer %s' % singer_name
+        scrape_singer(singer_name)
+    
+        
